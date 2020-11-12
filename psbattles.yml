@@ -1,0 +1,21 @@
+name: psbattles
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - ffmpeg=4.3.1
+  - numpy
+  - opencv=4.5.0=py38_2
+  - pandas
+  - pillow
+  - pip=20.2.4
+  - py-opencv=4.5.0
+  - python=3.8.6=h852b56e_0_cpython
+  - pip:
+    - pytorch-lightning==1.0.5
+    - torch==1.7.0
+    - torchsummary==1.5.1
+    - torchvision==0.8.1
+    - tqdm==4.51.0
+    - wandb
+prefix: /home/alex/miniconda3/envs/psbattles

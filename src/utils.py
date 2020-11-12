@@ -99,21 +99,27 @@ def unnormalise(y):
     return x
 
 
-def grid_to_heatmap(grid):
-    # TODO: pad grid with zeros to remove side stickiness
+def grid_to_heatmap(grid, cmap='jet'):
+    # TODO: pad grid with zeros to remove side stickiness ?
     # mask = cv2.resize(grid, (1024, 1024), interpolation=cv2.INTER_CUBIC)[int(1024 / 9):int(8 * 1024 / 9),
     #        int(1024 / 9):int(8 * 1024 / 9)]
     mask = cv2.resize(grid, (1024, 1024), interpolation=cv2.INTER_CUBIC)
 
     # Heatmap
-    colormap = plt.get_cmap('jet')
+    colormap = plt.get_cmap(cmap)
     heatmap = colormap(mask)
-    #heatmap /= np.max(heatmap)
+    # heatmap /= np.max(heatmap)
 
     # Convert to PIL
-    mask = np.clip((mask * 255), 0, 255).astype(np.uint8)
-    mask[mask > 200] = 200
-    mask = Image.fromarray(mask)
+    mask = np.clip(((mask ** 1) * 255), 0, 255)
+
+    border = cv2.inRange(mask, 80, 90)
+
+    mask[mask > 90] = 140
+    mask[mask < 80] = 0
+    mask[border == 255] = 255
+
+    mask = Image.fromarray(mask.astype(np.uint8))
 
     heatmap = (heatmap * 255).astype(np.uint8)
     heatmap = Image.fromarray(heatmap)
@@ -132,7 +138,7 @@ def summary_image(img, target, prediction):
     img1.paste(heatmap, (0, 0), mask)
 
     # Heatmap of target
-    img2 = unnormalise(img[:, 224:, :224])
+    img2 = unnormalise(img[:, :224, :224])
     img2 = TF.to_pil_image(img2).resize((size, size))
     heatmap, mask = grid_to_heatmap(target.view(7, 7).detach().numpy())
     img2.paste(heatmap, (0, 0), mask)
@@ -144,3 +150,45 @@ def summary_image(img, target, prediction):
     col1 = concat_v(prediction.resize((size, size), Image.NEAREST), target.resize((size, size), Image.NEAREST))
     full = concat_h(col1, col2)
     return full
+
+
+def short_summary_image(img, target, prediction):
+    prediction -= prediction.min()
+    prediction = prediction / prediction.max()
+
+    size = 1024
+
+    # Photoshopped image
+    img1 = unnormalise(img[:, 224:, :224])
+    img1 = TF.to_pil_image(img1).resize((size, size))
+
+    # Heatmap of target
+    heatmap, mask = grid_to_heatmap(target.view(7, 7).detach().numpy(), cmap='winter')
+    img1.paste(heatmap, (0, 0), mask)
+
+    # Heatmap of prediction
+    heatmap, mask = grid_to_heatmap(prediction.view(7, 7).detach().numpy(), cmap='Wistia')
+    img1.paste(heatmap, (0, 0), mask)
+
+    return img1
+
+
+def grid_to_binary(grid):
+    mask = cv2.resize(grid, (1024, 1024), interpolation=cv2.INTER_CUBIC)
+    mask = mask * 255
+    mask[mask < 80] = 0
+    mask[mask >= 80] = 255
+    return mask.astype(np.uint8)
+
+
+def heatmap_iou(target, prediction):
+    prediction -= prediction.min()
+    prediction = prediction / prediction.max()
+
+    binary_mask_target = grid_to_binary(target.view(7, 7).detach().cpu().numpy())
+    binary_mask_pred = grid_to_binary(prediction.view(7, 7).detach().cpu().numpy())
+
+    intersection = np.count_nonzero(np.logical_and(binary_mask_target, binary_mask_pred))
+    union = np.count_nonzero(np.logical_or(binary_mask_target, binary_mask_pred))
+
+    return intersection / union

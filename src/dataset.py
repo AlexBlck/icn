@@ -8,10 +8,13 @@ import cv2
 import matplotlib.pyplot as plt
 from torch.utils.data import Dataset
 from torchvision import transforms
+import torch
+# TODO: Make gaussian noise work?
+from transforms import AddGaussianNoise
 
 
 class PB(Dataset):
-    def __init__(self, root='/mnt/research/contentprov/projects/content_prov/data/psbattles/', split='test'):
+    def __init__(self, root='/home/alex/mounts/research/contentprov/projects/content_prov/data/psbattles/', split='test'):
         self.IMG_DIR = os.path.join(root, 'psbattles_public')
         self.TRAIN_LST = os.path.join(root, 'psbattles_public/train_pairs.csv')
         self.TEST_LST = os.path.join(root, 'psbattles_public/test_pairs.csv')
@@ -26,7 +29,8 @@ class PB(Dataset):
             self.pairs = pd.read_csv(self.TRAIN_LST)
         self.res = pd.concat([pd.read_csv(mturk) for mturk in self.MTURK], ignore_index=True)
 
-        self.img_transforms = transforms.Compose([transforms.ToTensor(),
+        self.img_transforms = transforms.Compose([transforms.ColorJitter(0.2, 0.2, 0.2, 0.05),
+                                                  transforms.ToTensor(),
                                                   transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                                                        std=[0.229, 0.224, 0.225])])
         self.target_transforms = transforms.Compose([transforms.ToTensor()])
@@ -35,6 +39,18 @@ class PB(Dataset):
         return len(self.pairs)
 
     def __getitem__(self, idx):
+        case = np.random.randint(3)
+        if case == 0:
+            return self.get_org_pho(idx)
+        elif case == 1:
+            return self.get_org_rand(idx)
+        else:
+            return self.get_org_org(idx)
+
+    def get_org_pho(self, idx):
+        """
+        Get the original image, it's photoshopped version and a heatmap of mturk annotations
+        """
         org_path = self.pairs['original'][idx]
         pho_path = self.pairs['photoshop'][idx]
         pho_name = pho_path.split('/')[-1]
@@ -58,12 +74,52 @@ class PB(Dataset):
                     boxes.append(box)
             ann_out.append(np.array(boxes))
 
-        img = concat_v(org.resize((224, 224)), pho.resize((224, 224)))  # Stack images vertically
         target = self.get_target(ann_out)  # Bbox annotations into a 7x7 grid
 
         # Apply transforms
-        img = self.img_transforms(img)
+        org = self.img_transforms(org.resize((224, 224)))
+        pho = self.img_transforms(pho.resize((224, 224)))
         target = self.target_transforms(target)
+
+        img = torch.cat((org, pho), 1)  # Stack images vertically
+        return img, target.view(-1)
+
+    def get_org_rand(self, idx):
+        """
+        Get the original image, another random image and a full white heatmap
+        """
+        org_path = self.pairs['original'][idx]
+        rand_path = self.pairs['original'][np.random.randint(len(self))]
+
+        org = Image.open(os.path.join(self.IMG_DIR, org_path)).convert('RGB').resize((224, 224))
+        rand = Image.open(os.path.join(self.IMG_DIR, rand_path)).convert('RGB').resize((224, 224))
+
+        target = np.ones((7, 7))  # Completely different images - white heatmap
+
+        # Apply transforms
+        org = self.img_transforms(org)
+        rand = self.img_transforms(rand)
+        target = self.target_transforms(target)
+
+        img = torch.cat((org, rand), 1)
+        return img, target.view(-1)
+
+    def get_org_org(self, idx):
+        """
+        Get two versions of the original image and a full black heatmap
+        """
+        org_path = self.pairs['original'][idx]
+
+        org = Image.open(os.path.join(self.IMG_DIR, org_path)).convert('RGB').resize((224, 224))
+
+        target = np.zeros((7, 7))  # Same image - black heatmap
+
+        # Apply transforms
+        org1 = self.img_transforms(org)
+        org2 = self.img_transforms(org)
+        target = self.target_transforms(target)
+
+        img = torch.cat((org1, org2), 1)
         return img, target.view(-1)
 
     def show(self, idx):
