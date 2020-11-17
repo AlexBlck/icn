@@ -4,7 +4,6 @@ from utils import *
 import json
 from PIL import Image
 import numpy as np
-import cv2
 import matplotlib.pyplot as plt
 from torch.utils.data import Dataset
 from torchvision import transforms
@@ -14,7 +13,7 @@ from transforms import AddGaussianNoise
 
 
 class PB(Dataset):
-    def __init__(self, root='/home/alex/mounts/research/contentprov/projects/content_prov/data/psbattles/', split='test'):
+    def __init__(self, root='/mnt/research/contentprov/projects/content_prov/data/psbattles/', split='test'):
         self.IMG_DIR = os.path.join(root, 'psbattles_public')
         self.TRAIN_LST = os.path.join(root, 'psbattles_public/train_pairs.csv')
         self.TEST_LST = os.path.join(root, 'psbattles_public/test_pairs.csv')
@@ -39,11 +38,9 @@ class PB(Dataset):
         return len(self.pairs)
 
     def __getitem__(self, idx):
-        case = np.random.randint(3)
+        case = np.random.randint(2)
         if case == 0:
             return self.get_org_pho(idx)
-        elif case == 1:
-            return self.get_org_rand(idx)
         else:
             return self.get_org_org(idx)
 
@@ -149,61 +146,4 @@ class PB(Dataset):
         if (dst > 0).any():
             dst /= np.max(dst)
         return dst
-
-    def heatmap(self, idx):
-        org, pho, ann_out = self.__getitem__(idx)
-        print(ann_out)
-        dst = np.zeros((9, 9))
-        # Draw bboxes
-        for i, boxes in enumerate(ann_out[:]):
-            for box in boxes[:]:
-                box *= 7
-                for x in range(7):
-                    for y in range(7):
-                        left = np.clip(box[0] - x, 0, 1)
-                        right = np.clip((x + 1) - (box[0] + box[2]), 0, 1)
-
-                        top = np.clip(box[1] - y, 0, 1)
-                        bot = np.clip(y + 1 - box[1] - box[3], 0, 1)
-
-                        ax = 1 - left - right
-                        ay = 1 - top - bot
-
-                        dst[y+1, x+1] += ax * ay * 100
-        # Grayscale
-        dst /= np.max(dst)
-        raw = dst[1:8, 1:8]
-        mask = cv2.resize(dst, (1024, 1024), interpolation=cv2.INTER_CUBIC)[int(1024 / 9):int(8 * 1024 / 9), int(1024 / 9):int(8 * 1024 / 9)]
-        mask = cv2.resize(mask, (1024, 1024), interpolation=cv2.INTER_CUBIC)
-        mask /= np.max(mask)
-
-        # Heatmap
-        colormap = plt.get_cmap('jet')
-        heatmap = colormap(mask)
-        heatmap /= np.max(heatmap)
-
-        # Convert to PIL
-        mask = np.clip((mask * 255), 0, 255).astype(np.uint8)
-        mask[mask > 200] = 200
-        mask = Image.fromarray(mask)
-
-        raw = (raw * 255).astype(np.uint8)
-        raw = Image.fromarray(raw)
-
-        heatmap = (heatmap * 255).astype(np.uint8)
-        heatmap = Image.fromarray(heatmap)
-
-        return raw, mask, heatmap
-
-
-# pb = PB()
-# img, target = pb[1243]
-# print(img.size)
-#
-# raw = target
-# raw = (raw * 255).astype(np.uint8)
-# raw = Image.fromarray(raw)
-# print(raw.size)
-# debug = concat_v(img, raw)
-# debug.show()
 

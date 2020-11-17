@@ -53,7 +53,7 @@ class Model(pl.LightningModule):
         # loss = F.mse_loss(heatmap.float(), target.float(), reduction='mean')
 
         # Log to wandb
-        if batch_idx % 100 == 0:
+        if batch_idx % 99 == 0:
             imgs = [wandb.Image(short_summary_image(img[i].cpu(), target[i].cpu(), heatmap[i].cpu())) for i in range(4)]
             self.logger.experiment.log({'Training Images': imgs}, commit=False)
         self.log('train_loss', loss, on_step=True)

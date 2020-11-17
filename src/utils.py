@@ -1,26 +1,7 @@
 from PIL import Image
 import numpy as np
 import torchvision.transforms.functional as TF
-import cv2
 import matplotlib.pyplot as plt
-
-def draw_bbox(img, bbox, hh, ww, col=(232, 32, 221), width=4):
-    ww /= 2
-    hh -= 20
-    x, y, w, h = bbox['left'], bbox['top'], bbox['width'], bbox['height']
-    x = int((x-400) / ww * img.shape[1])
-    w = int(w / ww * img.shape[1])
-    y = int(y / hh * img.shape[0])
-    h = int(h / hh * img.shape[0])
-    cv2.rectangle(img, (x, y), (x + w, y + h), col, width)
-
-
-def imshow(img):
-    while True:
-        cv2.imshow('img', img)
-        if cv2.waitKey(33) == ord('q'):
-            break
-    cv2.destroyAllWindows()
 
 
 def convert_annotation(org_size, pho_size, m_size, ann):
@@ -71,7 +52,7 @@ def convert_annotation(org_size, pho_size, m_size, ann):
 
 def concat_h(im1, im2):
     r = im1.height / im2.height
-    im2 = im2.resize((int(r * im2.width), im1.height), Image.NEAREST)
+    im2 = im2.resize((int(r * im2.width), im1.height), Image.BICUBIC)
     dst = Image.new('RGB', (im1.width + im2.width, im1.height))
     dst.paste(im1, (0, 0))
     dst.paste(im2, (im1.width, 0))
@@ -80,7 +61,7 @@ def concat_h(im1, im2):
 
 def concat_v(im1, im2):
     r = im1.width / im2.width
-    im2 = im2.resize((im1.width, int(r * im2.height)), Image.NEAREST)
+    im2 = im2.resize((im1.width, int(r * im2.height)), Image.BICUBIC)
     dst = Image.new('RGB', (im1.width, im1.height + im2.height))
     dst.paste(im1, (0, 0))
     dst.paste(im2, (0, im1.height))
@@ -99,28 +80,25 @@ def unnormalise(y):
     return x
 
 
+def mask_processing(x):
+    if x > 90:
+        return 140
+    elif x < 80:
+        return 0
+    else:
+        return 255
+
+
 def grid_to_heatmap(grid, cmap='jet'):
     # TODO: pad grid with zeros to remove side stickiness ?
-    # mask = cv2.resize(grid, (1024, 1024), interpolation=cv2.INTER_CUBIC)[int(1024 / 9):int(8 * 1024 / 9),
-    #        int(1024 / 9):int(8 * 1024 / 9)]
-    mask = cv2.resize(grid, (1024, 1024), interpolation=cv2.INTER_CUBIC)
+
+    mask = TF.to_pil_image(grid.view(7, 7))
+    mask = mask.resize((1024, 1024), Image.BICUBIC)
+    mask = Image.eval(mask, mask_processing)
 
     # Heatmap
     colormap = plt.get_cmap(cmap)
-    heatmap = colormap(mask)
-    # heatmap /= np.max(heatmap)
-
-    # Convert to PIL
-    mask = np.clip(((mask ** 1) * 255), 0, 255)
-
-    border = cv2.inRange(mask, 80, 90)
-
-    mask[mask > 90] = 140
-    mask[mask < 80] = 0
-    mask[border == 255] = 255
-
-    mask = Image.fromarray(mask.astype(np.uint8))
-
+    heatmap = np.array(colormap(mask))
     heatmap = (heatmap * 255).astype(np.uint8)
     heatmap = Image.fromarray(heatmap)
 
@@ -163,30 +141,30 @@ def short_summary_image(img, target, prediction):
     img1 = TF.to_pil_image(img1).resize((size, size))
 
     # Heatmap of target
-    heatmap, mask = grid_to_heatmap(target.view(7, 7).detach().numpy(), cmap='winter')
+    heatmap, mask = grid_to_heatmap(target, cmap='winter')
     img1.paste(heatmap, (0, 0), mask)
 
     # Heatmap of prediction
-    heatmap, mask = grid_to_heatmap(prediction.view(7, 7).detach().numpy(), cmap='Wistia')
+    heatmap, mask = grid_to_heatmap(prediction, cmap='Wistia')
     img1.paste(heatmap, (0, 0), mask)
 
     return img1
 
 
 def grid_to_binary(grid):
-    mask = cv2.resize(grid, (1024, 1024), interpolation=cv2.INTER_CUBIC)
-    mask = mask * 255
-    mask[mask < 80] = 0
-    mask[mask >= 80] = 255
-    return mask.astype(np.uint8)
+    mask = TF.to_pil_image(grid.view(7, 7))
+    mask = mask.resize((1024, 1024), Image.BICUBIC)
+    mask = Image.eval(mask, lambda x: 255 if x > 80 else 0)
+
+    return mask
 
 
 def heatmap_iou(target, prediction):
     prediction -= prediction.min()
     prediction = prediction / prediction.max()
 
-    binary_mask_target = grid_to_binary(target.view(7, 7).detach().cpu().numpy())
-    binary_mask_pred = grid_to_binary(prediction.view(7, 7).detach().cpu().numpy())
+    binary_mask_target = grid_to_binary(target)
+    binary_mask_pred = grid_to_binary(prediction)
 
     intersection = np.count_nonzero(np.logical_and(binary_mask_target, binary_mask_pred))
     union = np.count_nonzero(np.logical_or(binary_mask_target, binary_mask_pred))

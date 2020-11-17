@@ -5,8 +5,17 @@ from utils import *
 import numpy as np
 import torchvision.transforms.functional as TF
 
-model = Model.load_from_checkpoint('psbattles/2zmthjd0/checkpoints/epoch=4.ckpt')
-#model = Model()
+
+# Hyper-parameters
+hparams = {
+    'lr': 1e-1 * 2,
+    'bs': 32,
+    'num_workers': 16,
+    'gpus': 2
+}
+
+model = Model(hparams)
+
 pb = PB(split='test')
 img, target = pb[1125]  # 731, 1125: Face detector?? ,1243: bee man
 prediction = model(img.unsqueeze(0))

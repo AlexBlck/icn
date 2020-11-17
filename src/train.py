@@ -14,10 +14,10 @@ def main(hparams):
 if __name__ == '__main__':
     # Hyper-parameters
     hparams = {
-        'lr': 1e-1 * 4,
-        'bs': 32,
+        'lr': 1e-1,
+        'bs': 16,
         'num_workers': 16,
-        'gpus': 4
+        'gpus': 1
     }
 
     main(hparams)
