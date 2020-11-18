@@ -4,7 +4,7 @@ from dataset import PB
 from utils import *
 import numpy as np
 import torchvision.transforms.functional as TF
-
+from torchsummary import summary
 
 # Hyper-parameters
 hparams = {
@@ -16,9 +16,13 @@ hparams = {
 
 model = Model(hparams)
 
-pb = PB(split='test')
-img, target = pb[1125]  # 731, 1125: Face detector?? ,1243: bee man
-prediction = model(img.unsqueeze(0))
-full = short_summary_image(img, target, prediction)
-print(heatmap_iou(target, prediction))
-full.show()
+summary(model, (6, 224, 224), device='cpu')
+
+# pb = PB(split='test')
+# img, target = pb[1125]  # 731, 1125: Face detector?? ,1243: bee man
+
+
+# prediction = model(img.unsqueeze(0))
+# full = short_summary_image(img, target, prediction)
+# print(heatmap_iou(target, prediction))
+# full.show()

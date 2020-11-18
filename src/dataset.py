@@ -13,7 +13,10 @@ from transforms import AddGaussianNoise
 
 
 class PB(Dataset):
-    def __init__(self, root='/mnt/research/contentprov/projects/content_prov/data/psbattles/', split='test'):
+    def __init__(self, root_prefix, split='test'):
+        root = 'research/contentprov/projects/content_prov/data/psbattles/'
+        root = os.path.join(root_prefix, root)
+
         self.IMG_DIR = os.path.join(root, 'psbattles_public')
         self.TRAIN_LST = os.path.join(root, 'psbattles_public/train_pairs.csv')
         self.TEST_LST = os.path.join(root, 'psbattles_public/test_pairs.csv')
@@ -42,7 +45,7 @@ class PB(Dataset):
         if case == 0:
             return self.get_org_pho(idx)
         else:
-            return self.get_org_org(idx)
+            return self.get_org_pho(idx)
 
     def get_org_pho(self, idx):
         """
@@ -78,7 +81,7 @@ class PB(Dataset):
         pho = self.img_transforms(pho.resize((224, 224)))
         target = self.target_transforms(target)
 
-        img = torch.cat((org, pho), 1)  # Stack images vertically
+        img = torch.vstack((org, pho))  # Stack images channel-wise
         return img, target.view(-1)
 
     def get_org_rand(self, idx):
@@ -98,7 +101,7 @@ class PB(Dataset):
         rand = self.img_transforms(rand)
         target = self.target_transforms(target)
 
-        img = torch.cat((org, rand), 1)
+        img = torch.cat((org, rand), 0)
         return img, target.view(-1)
 
     def get_org_org(self, idx):
@@ -116,13 +119,8 @@ class PB(Dataset):
         org2 = self.img_transforms(org)
         target = self.target_transforms(target)
 
-        img = torch.cat((org1, org2), 1)
+        img = torch.vstack((org1, org2))
         return img, target.view(-1)
-
-    def show(self, idx):
-        o, p, a = self.__getitem__(idx)
-        im = concat_h(o, p)
-        im.show()
 
     @staticmethod
     def get_target(ann_out):

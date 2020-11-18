@@ -137,7 +137,7 @@ def short_summary_image(img, target, prediction):
     size = 1024
 
     # Photoshopped image
-    img1 = unnormalise(img[:, 224:, :224])
+    img1 = unnormalise(img[3:, :, :])
     img1 = TF.to_pil_image(img1).resize((size, size))
 
     # Heatmap of target

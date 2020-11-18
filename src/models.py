@@ -11,6 +11,7 @@ from torch.optim import Adam
 import torch
 import torchvision.transforms.functional as TF
 from utils import *
+from model_utils import freeze
 
 
 class Model(pl.LightningModule):
@@ -20,24 +21,65 @@ class Model(pl.LightningModule):
         # Hyperparameters
         self.hparams = hparams
         # Dataset
-        self.ds_train = PB(split='train')
-        self.ds_test = PB(split='test')
+        prefix = None
+        if self.hparams.env == 'home':
+            prefix = '/mnt/'
+        elif self.hparams.env == 'servers':
+            prefix = '/home/alex/mounts/'
+        elif self.hparams.env == 'condor':
+            prefix = '/vol/'
+        self.ds_train = PB(split='train', root_prefix=prefix)
+        self.ds_test = PB(split='test', root_prefix=prefix)
 
         self.cnn = models.resnet50(pretrained=True, progress=True)
-        self.cnn = nn.Sequential(*list(self.cnn.children())[:-2])
+        self.cnn = nn.Sequential(*list(self.cnn.children())[:2])
+        freeze(self.cnn)  # train_bn = True
 
-        self.avg_pool = nn.AdaptiveAvgPool3d((1, 2 * 7, 7))
-        self.fc1 = nn.Linear(7 * 7, 512)
-        self.fc2 = nn.Linear(512, 7 * 7)
+        self.conv1 = nn.Conv2d(128, 64, 3, padding=1)
+        self.conv2 = nn.Conv2d(64, 32, 3, padding=1)
+        self.conv3 = nn.Conv2d(32, 16, 3, padding=1)
+
+        self.pool = nn.MaxPool2d(3, 2)
+
+        self.bn1 = nn.BatchNorm2d(num_features=64)
+        self.bn2 = nn.BatchNorm2d(num_features=32)
+        self.bn3 = nn.BatchNorm2d(num_features=16)
+
+        self.avg_pool = nn.AdaptiveAvgPool3d((1, 7, 7))
+
+        self.fc1 = nn.Linear(16*13*13, 256)
+        self.fc2 = nn.Linear(256, 7 * 7)
 
     def forward(self, x):
-        #                            Input: [-1, 3, 448, 224]
-        x = self.cnn(x)                   # [-1, 2048, 14, 7]
-        x = self.avg_pool(x)              # [-1, 1, 14, 7]
-        x = x.view(-1, 2 * 7 * 7)         # [-1, 98]
-        x = (x[:, :49] - x[:, 49:]) ** 2  # [-1, 49]
-        x = F.relu(self.fc1(x))           # [-1, 512]
-        x = F.relu(self.fc2(x))           # [-1, 49]
+        #                            Input: [-1, 6, 224, 224]
+        real = x[:, :3, :, :]
+        fake = x[:, 3:, :, :]
+
+        real_features = self.cnn(real)    # [-1, 2048, 7, 7]
+        fake_features = self.cnn(fake)    # [-1, 2048, 7, 7]
+
+        combined = torch.cat((real_features, fake_features), 1)
+
+        x = self.conv1(combined)
+        x = self.pool(x)
+        x = self.bn1(x)
+        x = F.relu(x)
+
+        x = self.conv2(x)
+        x = self.pool(x)
+        x = self.bn2(x)
+        x = F.relu(x)
+
+        x = self.conv3(x)
+        x = self.pool(x)
+        x = self.bn3(x)
+        x = F.relu(x)
+
+        x = x.view(-1, 16*13*13)
+
+        x = self.fc1(x)
+        x = self.fc2(x)
+
         return x
 
     def configure_optimizers(self):
