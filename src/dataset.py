@@ -45,7 +45,7 @@ class PB(Dataset):
         if case == 0:
             return self.get_org_pho(idx)
         else:
-            return self.get_org_pho(idx)
+            return self.get_org_org(idx)
 
     def get_org_pho(self, idx):
         """
@@ -82,7 +82,7 @@ class PB(Dataset):
         target = self.target_transforms(target)
 
         img = torch.vstack((org, pho))  # Stack images channel-wise
-        return img, target.view(-1)
+        return img, target.view(-1), 1
 
     def get_org_rand(self, idx):
         """
@@ -120,7 +120,7 @@ class PB(Dataset):
         target = self.target_transforms(target)
 
         img = torch.vstack((org1, org2))
-        return img, target.view(-1)
+        return img, target.view(-1), 0
 
     @staticmethod
     def get_target(ann_out):
