@@ -160,9 +160,6 @@ def grid_to_binary(grid):
 
 
 def heatmap_iou(target, prediction):
-    prediction -= prediction.min()
-    prediction = prediction / prediction.max()
-
     binary_mask_target = grid_to_binary(target)
     binary_mask_pred = grid_to_binary(prediction)
 
@@ -170,3 +167,9 @@ def heatmap_iou(target, prediction):
     union = np.count_nonzero(np.logical_or(binary_mask_target, binary_mask_pred))
 
     return intersection / union
+
+
+def heatmap_emptiness(prediction):
+    binary_mask_pred = grid_to_binary(prediction)
+
+    return 1 - np.count_nonzero(binary_mask_pred) / np.array(binary_mask_pred).size

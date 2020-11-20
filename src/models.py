@@ -49,13 +49,15 @@ class Model(pl.LightningModule):
         self.fc2 = nn.Linear(256, 7 * 7)
 
         self.cls_fc = nn.Linear(256, 1)
-        self.sigmoid = nn.Sigmoid()
+        self.sigmoid1 = nn.Sigmoid()
+        self.sigmoid2 = nn.Sigmoid()
 
     def forward(self, x):
-        #                            Input: [-1, 6, 224, 224]
+        # Input: [-1, 6, 224, 224]
         real = x[:, :3, :, :]
         fake = x[:, 3:, :, :]
 
+        # Push both images through pretrained backbone
         real_features = self.cnn(real)    # [-1, 2048, 7, 7]
         fake_features = self.cnn(fake)    # [-1, 2048, 7, 7]
 
@@ -78,12 +80,18 @@ class Model(pl.LightningModule):
 
         x = x.view(-1, 16*13*13)
 
+        # Final feature [-1, 256]
         d = F.relu(self.fc1(x))
-        grid = self.fc2(d)
-        cls = self.cls_fc(d)
-        cls = self.sigmoid(cls)
 
-        return grid * cls, cls
+        # Heatmap [-1, 49]
+        grid = self.fc2(d)
+        grid = self.sigmoid1(0.5 * grid)
+
+        # Classifier [-1, 1]
+        cls = self.cls_fc(d)
+        cls = self.sigmoid2(cls)
+
+        return grid, cls
 
     def configure_optimizers(self):
         opt = SGD(self.parameters(), lr=self.hparams.lr)
@@ -91,13 +99,18 @@ class Model(pl.LightningModule):
         return opt
 
     def training_step(self, batch, batch_idx):
+        # Forward
         img, target, cls_target = batch
         heatmap, cls = self(img)
 
-        cos_similarity = (1 - F.cosine_similarity(target, heatmap)).mean()
+        # Compute metrics
         classification = F.binary_cross_entropy(cls.squeeze().float(), cls_target.float())
-        # loss = F.mse_loss(heatmap.float(), target.float(), reduction='mean')
-        loss = 0.5 * classification + 0.5 * cos_similarity
+        preds = torch.round(cls)
+        heatmap *= preds  # Zero out heatmap if classified as benign
+
+        cos_similarity = (1 - F.cosine_similarity(target, heatmap)).mean()
+        mse = F.mse_loss(heatmap.float(), target.float(), reduction='mean')
+        loss = 0.5 * classification + 0.5 * mse
 
         # Log to wandb
         if batch_idx % 99 == 0:
@@ -106,24 +119,41 @@ class Model(pl.LightningModule):
         self.log('train_sim', cos_similarity, on_step=True)
         self.log('train_cls', classification, on_step=True)
         self.log('train_loss', loss, on_step=True)
+        self.log('train_mse', mse, on_step=True)
 
         return {'loss': loss}
 
     def validation_step(self, batch, batch_idx):
+        # Forward
         img, target, cls_target = batch
         heatmap, cls = self(img)
 
-        cos_similarity = (1 - F.cosine_similarity(target, heatmap)).mean()
         classification = F.binary_cross_entropy(cls.squeeze().float(), cls_target.float())
-        mse = F.mse_loss(heatmap.float(), target.float(), reduction='mean')
-        iou = [heatmap_iou(t, h) for t, h in zip(target, heatmap)]
+        preds = torch.round(cls)
 
-        loss = 0.5 * classification + 0.5 * cos_similarity
+        heatmap *= preds
+
+        cos_similarity = (1 - F.cosine_similarity(target, heatmap)).mean()
+        acc = torch.sum(preds.squeeze() == cls_target) / self.hparams.bs
+        mse = F.mse_loss(heatmap.float(), target.float(), reduction='mean')
+
+        iou = []
+        emptiness = []
+        scores = []
+        for t, h in zip(target, heatmap):
+            if (t == 0).all():
+                emptiness.append(heatmap_emptiness(h))
+                scores.append(('Emptiness', emptiness[-1]))
+            else:
+                iou.append(heatmap_iou(t, h))
+                scores.append(('IoU', iou[-1]))
+
+        loss = 0.5 * classification + 0.5 * mse
 
         # Log to wandb
         if batch_idx == 0:
             imgs = [wandb.Image(short_summary_image(img[i].cpu(), target[i].cpu(), heatmap[i].cpu()),
-                                caption=f'IoU: {iou[i]}') for i in range(8)]
+                                caption=f'{scores[i]}') for i in range(8)]
             self.logger.experiment.log({'Validation Images': imgs}, commit=False)
 
         self.log('val_cls', classification)
@@ -131,6 +161,8 @@ class Model(pl.LightningModule):
         self.log('val_loss', loss)
         self.log('val_mse', mse)
         self.log('val_iou', np.mean(iou))
+        self.log('val_emptiness', np.mean(emptiness))
+        self.log('val_acc', acc)
 
         return {'val_loss': loss}
 
