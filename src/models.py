@@ -85,7 +85,7 @@ class Model(pl.LightningModule):
 
         # Heatmap [-1, 49]
         grid = self.fc2(d)
-        grid = self.sigmoid1(0.5 * grid)
+        # grid = self.sigmoid1(0.5 * grid)
 
         # Classifier [-1, 1]
         cls = self.cls_fc(d)
@@ -95,7 +95,7 @@ class Model(pl.LightningModule):
 
     def configure_optimizers(self):
         opt = SGD(self.parameters(), lr=self.hparams.lr)
-        # opt = Adam(self.parameters(), lr=self.hparams.lr)
+        # opt = Adam(self.parameters(), lr=self.hparams.lr)  # TODO: Add weight_decay
         return opt
 
     def training_step(self, batch, batch_idx):
@@ -110,7 +110,7 @@ class Model(pl.LightningModule):
 
         cos_similarity = (1 - F.cosine_similarity(target, heatmap)).mean()
         mse = F.mse_loss(heatmap.float(), target.float(), reduction='mean')
-        loss = 0.5 * classification + 0.5 * mse
+        loss = 0.5 * classification + 0.5 * cos_similarity
 
         # Log to wandb
         if batch_idx % 99 == 0:
@@ -148,7 +148,7 @@ class Model(pl.LightningModule):
                 iou.append(heatmap_iou(t, h))
                 scores.append(('IoU', iou[-1]))
 
-        loss = 0.5 * classification + 0.5 * mse
+        loss = 0.5 * classification + 0.5 * cos_similarity
 
         # Log to wandb
         if batch_idx == 0:

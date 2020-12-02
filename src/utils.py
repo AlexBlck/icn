@@ -160,6 +160,9 @@ def grid_to_binary(grid):
 
 
 def heatmap_iou(target, prediction):
+    prediction -= prediction.min()
+    prediction = prediction / prediction.max()
+
     binary_mask_target = grid_to_binary(target)
     binary_mask_pred = grid_to_binary(prediction)
 

@@ -9,7 +9,7 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 import torch
 # TODO: Make gaussian noise work?
-from transforms import AddGaussianNoise
+from transforms import GaussianNoise
 
 
 class PB(Dataset):
@@ -33,6 +33,7 @@ class PB(Dataset):
 
         self.img_transforms = transforms.Compose([transforms.ColorJitter(0.2, 0.2, 0.2, 0.05),
                                                   transforms.ToTensor(),
+                                                  GaussianNoise(),
                                                   transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                                                        std=[0.229, 0.224, 0.225])])
         self.target_transforms = transforms.Compose([transforms.ToTensor()])
