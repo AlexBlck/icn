@@ -9,7 +9,7 @@ def main(hparams):
     random.seed(42)
     model = Model(hparams)
     wandb_logger = WandbLogger(name=hparams.name, project='psbattles')
-    trainer = pl.Trainer(gpus=[1], logger=wandb_logger, log_every_n_steps=1)
+    trainer = pl.Trainer(gpus=[hparams.gpus], logger=wandb_logger, log_every_n_steps=1)
     wandb_logger.experiment.save('models.py')
     trainer.fit(model)
 

@@ -69,7 +69,7 @@ def concat_v(im1, im2):
 
 
 def unnormalise(y):
-    # assuming x and y are Batch x 3 x H x W and ,
+    # assuming x and y are Batch x 3 x H x W
     mean = [0.485, 0.456, 0.406]
     std = [0.229, 0.224, 0.225]
     x = y.new(*y.size())
@@ -77,6 +77,8 @@ def unnormalise(y):
     x[1, :, :] = y[1, :, :] * std[1] + mean[1]
     x[2, :, :] = y[2, :, :] * std[2] + mean[2]
 
+    x = x - x.min()
+    x = x / x.max()
     return x
 
 

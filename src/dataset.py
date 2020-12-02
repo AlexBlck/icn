@@ -33,9 +33,10 @@ class PB(Dataset):
 
         self.img_transforms = transforms.Compose([transforms.ColorJitter(0.2, 0.2, 0.2, 0.05),
                                                   transforms.ToTensor(),
-                                                  GaussianNoise(),
                                                   transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                                                       std=[0.229, 0.224, 0.225])])
+                                                                       std=[0.229, 0.224, 0.225]),
+                                                  GaussianNoise(std=0.2)
+                                                  ])
         self.target_transforms = transforms.Compose([transforms.ToTensor()])
 
     def __len__(self):
