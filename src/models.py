@@ -12,6 +12,7 @@ import torch
 import torchvision.transforms.functional as TF
 from utils import *
 from model_utils import freeze
+import torchsummary
 
 
 class Model(pl.LightningModule):
@@ -32,20 +33,17 @@ class Model(pl.LightningModule):
         self.ds_test = PB(split='test', root_prefix=prefix)
 
         self.cnn = models.resnet50(pretrained=True, progress=True)
-        self.cnn = nn.Sequential(*list(self.cnn.children())[:2])
-        freeze(self.cnn)  # train_bn = True
+        self.cnn_head = nn.Sequential(*list(self.cnn.children())[:4],
+                                      *list(list(list(self.cnn.children())[4].children())[0].children())[:4])
+        self.cnn_tail = nn.Sequential(*list(list(self.cnn.children())[4].children())[1:],
+                                      *list(self.cnn.children())[5:-2])
+        # freeze(self.cnn_head)  # train_bn = True
+        # freeze(self.cnn_tail)  # train_bn = True
 
-        self.conv1 = nn.Conv2d(128, 64, 3, padding=1)
-        self.conv2 = nn.Conv2d(64, 32, 3, padding=1)
-        self.conv3 = nn.Conv2d(32, 16, 3, padding=1)
+        self.conv1 = nn.Conv2d(128, 256, 3, padding=1)
+        self.bn1 = nn.BatchNorm2d(num_features=256)
 
-        self.pool = nn.MaxPool2d(3, 2)
-
-        self.bn1 = nn.BatchNorm2d(num_features=64)
-        self.bn2 = nn.BatchNorm2d(num_features=32)
-        self.bn3 = nn.BatchNorm2d(num_features=16)
-
-        self.fc1 = nn.Linear(16*13*13, 256)
+        self.fc1 = nn.Linear(2048 * 7 * 7, 256)
         self.fc2 = nn.Linear(256, 7 * 7)
 
         self.cls_fc = nn.Linear(256, 1)
@@ -58,27 +56,17 @@ class Model(pl.LightningModule):
         fake = x[:, 3:, :, :]
 
         # Push both images through pretrained backbone
-        real_features = self.cnn(real)    # [-1, 2048, 7, 7]
-        fake_features = self.cnn(fake)    # [-1, 2048, 7, 7]
+        real_features = F.relu(self.cnn_head(real))    # [-1, 64, 56, 56]
+        fake_features = F.relu(self.cnn_head(fake))    # [-1, 64, 56, 56]
 
-        combined = torch.cat((real_features, fake_features), 1)
+        combined = torch.cat((real_features, fake_features), 1)  # [-1, 128, 56, 56]
 
-        x = self.conv1(combined)
-        x = self.pool(x)
+        x = self.conv1(combined)  # [-1, 256, 56, 56]
         x = self.bn1(x)
         x = F.relu(x)
 
-        x = self.conv2(x)
-        x = self.pool(x)
-        x = self.bn2(x)
-        x = F.relu(x)
-
-        x = self.conv3(x)
-        x = self.pool(x)
-        x = self.bn3(x)
-        x = F.relu(x)
-
-        x = x.view(-1, 16*13*13)
+        x = self.cnn_tail(x)
+        x = x.view(-1, 2048 * 7 * 7)
 
         # Final feature [-1, 256]
         d = F.relu(self.fc1(x))

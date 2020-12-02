@@ -32,7 +32,7 @@ for batch in dataloader:
     # Compute metrics
     classification = F.binary_cross_entropy(cls.squeeze().float(), cls_target.float())
     preds = torch.round(cls)
-    heatmap *= 0  # Zero out heatmap if classified as benign
+    heatmap *= 1  # Zero out heatmap if classified as benign
 
     cos_similarity = (1 - F.cosine_similarity(target, heatmap)).mean()
     mse = F.mse_loss(heatmap.float(), target.float(), reduction='mean')

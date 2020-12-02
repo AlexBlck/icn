@@ -8,7 +8,6 @@ import matplotlib.pyplot as plt
 from torch.utils.data import Dataset
 from torchvision import transforms
 import torch
-# TODO: Make gaussian noise work?
 from transforms import GaussianNoise
 
 
