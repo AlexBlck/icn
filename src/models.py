@@ -29,8 +29,8 @@ class Model(pl.LightningModule):
             prefix = '/home/alex/mounts/'
         elif self.hparams.env == 'condor':
             prefix = '/vol/'
-        self.ds_train = PB(split='train', root_prefix=prefix)
-        self.ds_test = PB(split='test', root_prefix=prefix)
+        self.ds_train = PB(split='train', root_prefix=prefix, max_sev=hparams.max_sev)
+        self.ds_test = PB(split='test', root_prefix=prefix, max_sev=hparams.max_sev)
 
         self.cnn = models.resnet50(pretrained=True, progress=True)
         self.cnn_head = nn.Sequential(*list(self.cnn.children())[:4],
@@ -102,7 +102,7 @@ class Model(pl.LightningModule):
 
         # Log to wandb
         if batch_idx % 99 == 0:
-            imgs = [wandb.Image(short_summary_image(img[i].cpu(), target[i].cpu(), heatmap[i].cpu())) for i in range(4)]
+            imgs = [wandb.Image(short_summary_image_three(img[i].cpu(), target[i].cpu(), heatmap[i].cpu())) for i in range(4)]
             self.logger.experiment.log({'Training Images': imgs}, commit=False)
         self.log('train_sim', cos_similarity, on_step=True)
         self.log('train_cls', classification, on_step=True)
@@ -140,7 +140,7 @@ class Model(pl.LightningModule):
 
         # Log to wandb
         if batch_idx == 0:
-            imgs = [wandb.Image(short_summary_image(img[i].cpu(), target[i].cpu(), heatmap[i].cpu()),
+            imgs = [wandb.Image(short_summary_image_three(img[i].cpu(), target[i].cpu(), heatmap[i].cpu()),
                                 caption=f'{scores[i]}') for i in range(8)]
             self.logger.experiment.log({'Validation Images': imgs}, commit=False)
 

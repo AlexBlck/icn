@@ -1,11 +1,20 @@
 import torch
+from imagenet_c import corrupt, corruption_dict
+import random
+import numpy as np
 
 
-class GaussianNoise(torch.nn.Module):
+class ImagenetC(torch.nn.Module):
+    methods = list(corruption_dict.keys())
 
-    def __init__(self, std=0.2):
+    def __init__(self, max_sev):
         super().__init__()
-        self.std = std
+        self.max_sev = max_sev
 
     def forward(self, x):
-        return x + torch.randn_like(x) * self.std
+        method = random.choice(self.methods)
+        severity = random.randint(0, self.max_sev)
+
+        x = np.array(x)
+        x = corrupt(x, severity, method)
+        return x

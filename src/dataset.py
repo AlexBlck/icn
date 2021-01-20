@@ -4,18 +4,17 @@ from utils import *
 import json
 from PIL import Image
 import numpy as np
-import matplotlib.pyplot as plt
 from torch.utils.data import Dataset
 from torchvision import transforms
 import torch
-from transforms import GaussianNoise
+from transforms import ImagenetC
 
 
 class PB(Dataset):
-    def __init__(self, root_prefix, split='test'):
+    def __init__(self, root_prefix, split='test', max_sev=5):
         root = 'research/contentprov/projects/content_prov/data/psbattles/'
         root = os.path.join(root_prefix, root)
-
+        self.split = split
         self.IMG_DIR = os.path.join(root, 'psbattles_public')
         self.TRAIN_LST = os.path.join(root, 'psbattles_public/train_pairs.csv')
         self.TEST_LST = os.path.join(root, 'psbattles_public/test_pairs.csv')
@@ -30,12 +29,15 @@ class PB(Dataset):
             self.pairs = pd.read_csv(self.TRAIN_LST)
         self.res = pd.concat([pd.read_csv(mturk) for mturk in self.MTURK], ignore_index=True)
 
-        self.img_transforms = transforms.Compose([transforms.ColorJitter(0.2, 0.2, 0.2, 0.05),
-                                                  transforms.ToTensor(),
-                                                  transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                                                       std=[0.229, 0.224, 0.225]),
-                                                  GaussianNoise(std=0.2)
-                                                  ])
+        self.img_transforms_train = transforms.Compose([ImagenetC(max_sev),
+                                                        transforms.ToTensor(),
+                                                        transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                                                             std=[0.229, 0.224, 0.225]),
+                                                        ])
+        self.img_transforms_test = transforms.Compose([transforms.ToTensor(),
+                                                       transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                                                            std=[0.229, 0.224, 0.225]),
+                                                       ])
         self.target_transforms = transforms.Compose([transforms.ToTensor()])
 
     def __len__(self):
@@ -78,32 +80,16 @@ class PB(Dataset):
         target = self.get_target(ann_out)  # Bbox annotations into a 7x7 grid
 
         # Apply transforms
-        org = self.img_transforms(org.resize((224, 224)))
-        pho = self.img_transforms(pho.resize((224, 224)))
+        if self.split == 'train':
+            org = self.img_transforms_train(org.resize((224, 224)))
+            pho = self.img_transforms_train(pho.resize((224, 224)))
+        else:
+            org = self.img_transforms_test(org.resize((224, 224)))
+            pho = self.img_transforms_test(pho.resize((224, 224)))
         target = self.target_transforms(target)
 
         img = torch.vstack((org, pho))  # Stack images channel-wise
         return img, target.view(-1), 1
-
-    def get_org_rand(self, idx):
-        """
-        Get the original image, another random image and a full white heatmap
-        """
-        org_path = self.pairs['original'][idx]
-        rand_path = self.pairs['original'][np.random.randint(len(self))]
-
-        org = Image.open(os.path.join(self.IMG_DIR, org_path)).convert('RGB').resize((224, 224))
-        rand = Image.open(os.path.join(self.IMG_DIR, rand_path)).convert('RGB').resize((224, 224))
-
-        target = np.ones((7, 7))  # Completely different images - white heatmap
-
-        # Apply transforms
-        org = self.img_transforms(org)
-        rand = self.img_transforms(rand)
-        target = self.target_transforms(target)
-
-        img = torch.cat((org, rand), 0)
-        return img, target.view(-1)
 
     def get_org_org(self, idx):
         """
@@ -116,8 +102,12 @@ class PB(Dataset):
         target = np.zeros((7, 7))  # Same image - black heatmap
 
         # Apply transforms
-        org1 = self.img_transforms(org)
-        org2 = self.img_transforms(org)
+        if self.split == 'train':
+            org1 = self.img_transforms_train(org)
+            org2 = self.img_transforms_train(org)
+        else:
+            org1 = self.img_transforms_test(org)
+            org2 = self.img_transforms_test(org)
         target = self.target_transforms(target)
 
         img = torch.vstack((org1, org2))
@@ -145,4 +135,3 @@ class PB(Dataset):
         if (dst > 0).any():
             dst /= np.max(dst)
         return dst
-

@@ -153,6 +153,35 @@ def short_summary_image(img, target, prediction):
     return img1
 
 
+def short_summary_image_three(img, target, prediction):
+    prediction -= prediction.min()
+    prediction = prediction / prediction.max()
+
+    size = 1024
+
+    # Photoshopped image
+    img1 = unnormalise(img[3:, :, :])
+    img1 = TF.to_pil_image(img1).resize((size, size))
+
+    img3 = unnormalise(img[:3, :, :])
+    img3 = TF.to_pil_image(img3).resize((size, size))
+
+    img2 = img1.copy()
+
+    # Heatmap of target
+    heatmap, mask = grid_to_heatmap(target, cmap='winter')
+    img1.paste(heatmap, (0, 0), mask)
+
+    # Heatmap of prediction
+    heatmap, mask = grid_to_heatmap(prediction, cmap='Wistia')
+    img1.paste(heatmap, (0, 0), mask)
+
+    full = concat_h(img3, img2)
+    full = concat_h(full, img1)
+
+    return full
+
+
 def grid_to_binary(grid):
     mask = TF.to_pil_image(grid.view(7, 7))
     mask = mask.resize((1024, 1024), Image.BICUBIC)

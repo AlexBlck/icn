@@ -21,7 +21,9 @@ if __name__ == '__main__':
     parser.add_argument("--num_workers", default=16, type=int, required=False)
     parser.add_argument("--env", default='home', type=str, required=False)
     parser.add_argument("--gpus", default=1, type=int, required=False)
+    parser.add_argument("--max_sev", default=5, type=int, required=False)
     parser.add_argument("--name", default='unnamed', type=str, required=False)
+
     args = parser.parse_args()
 
     main(args)
