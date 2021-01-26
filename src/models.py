@@ -140,7 +140,7 @@ class Model(pl.LightningModule):
 
         # Log to wandb
         if batch_idx == 0:
-            imgs = [wandb.Image(short_summary_image_three(img[i].cpu(), target[i].cpu(), heatmap[i].cpu()),
+            imgs = [wandb.Image(short_summary_image(img[i].cpu(), target[i].cpu(), heatmap[i].cpu()),
                                 caption=f'{scores[i]}') for i in range(8)]
             self.logger.experiment.log({'Validation Images': imgs}, commit=False)
 

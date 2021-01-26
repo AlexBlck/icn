@@ -16,5 +16,6 @@ class ImagenetC(torch.nn.Module):
         severity = random.randint(0, self.max_sev)
 
         x = np.array(x)
-        x = corrupt(x, severity, method)
+        if random.random() > 0.5:
+            x = corrupt(x, severity, method)
         return x
