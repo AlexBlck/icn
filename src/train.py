@@ -1,16 +1,18 @@
-from models import Model
+from models import *
 from pytorch_lightning.loggers import WandbLogger
 import pytorch_lightning as pl
 from argparse import ArgumentParser
 import random
+from dewarper import *
 
 
 def main(hparams):
     random.seed(42)
-    model = Model(hparams)
+    model = Dewarper(hparams)
     wandb_logger = WandbLogger(name=hparams.name, project='psbattles')
-    trainer = pl.Trainer(gpus=[hparams.gpus], logger=wandb_logger, log_every_n_steps=1)
-    wandb_logger.experiment.save('models.py')
+    wandb_logger.experiment.save('dewarper.py', policy='now')
+    trainer = pl.Trainer(gpus=[hparams.gpus], logger=wandb_logger, log_every_n_steps=1,
+                         check_val_every_n_epoch=5)
     trainer.fit(model)
 
 

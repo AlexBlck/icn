@@ -29,7 +29,7 @@ class PB(Dataset):
             self.pairs = pd.read_csv(self.TRAIN_LST)
         self.res = pd.concat([pd.read_csv(mturk) for mturk in self.MTURK], ignore_index=True)
 
-        self.img_transforms_train = transforms.Compose([ImagenetC(max_sev),
+        self.img_transforms_train = transforms.Compose([ # transforms.RandomAffine(30, (0.1, 0.1), (0.8, 1.2),resample=Image.BILINEAR)
                                                         transforms.ToTensor(),
                                                         transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                                                              std=[0.229, 0.224, 0.225]),
@@ -81,7 +81,7 @@ class PB(Dataset):
 
         # Apply transforms
         if self.split == 'train':
-            org = self.img_transforms_train(org.resize((224, 224)))
+            org = self.img_transforms_test(org.resize((224, 224)))
             pho = self.img_transforms_train(pho.resize((224, 224)))
         else:
             org = self.img_transforms_test(org.resize((224, 224)))
@@ -103,7 +103,7 @@ class PB(Dataset):
 
         # Apply transforms
         if self.split == 'train':
-            org1 = self.img_transforms_train(org)
+            org1 = self.img_transforms_test(org)
             org2 = self.img_transforms_train(org)
         else:
             org1 = self.img_transforms_test(org)

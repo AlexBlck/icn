@@ -6,3 +6,7 @@ src/lightning_logs/
 src/psbattles/
 src/wandb/
 robustness/
+
+videos/
+
+weights/

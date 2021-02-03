@@ -182,6 +182,69 @@ def short_summary_image_three(img, target, prediction):
     return full
 
 
+def stn_summary_image(img, target, fake, prediction):
+    prediction -= prediction.min()
+    prediction = prediction / prediction.max()
+
+    size = 1024
+
+    # Photoshopped image
+    img1 = unnormalise(img[:3, :, :])
+    img1 = TF.to_pil_image(img1).resize((size, size))
+
+    img2 = unnormalise(img[3:, :, :])
+    img2 = TF.to_pil_image(img2).resize((size, size))
+
+    img3 = unnormalise(fake)
+    img3 = TF.to_pil_image(img3).resize((size, size))
+
+    # Heatmap of target
+    heatmap, mask = grid_to_heatmap(target, cmap='winter')
+    img3.paste(heatmap, (0, 0), mask)
+
+    # Heatmap of prediction
+    heatmap, mask = grid_to_heatmap(prediction, cmap='Wistia')
+    img3.paste(heatmap, (0, 0), mask)
+
+    full = concat_h(img1, img2)
+    full = concat_h(full, img3)
+
+    return full
+
+
+def stn_only_summary_image(img, fake):
+    size = 1024
+
+    # Photoshopped image
+    img1 = unnormalise(img[:3, :, :])
+    img1 = TF.to_pil_image(img1).resize((size, size))
+
+    img2 = unnormalise(img[3:, :, :])
+    img2 = TF.to_pil_image(img2).resize((size, size))
+
+    img3 = unnormalise(fake)
+    img3 = TF.to_pil_image(img3).resize((size, size))
+
+    full = concat_h(img1, img2)
+    full = concat_h(full, img3)
+
+    return full
+
+
+def dewarper_summary_image(warped, dewarped):
+    size = 1024
+
+    img1 = unnormalise(warped)
+    img1 = TF.to_pil_image(img1).resize((size, size))
+
+    img2 = unnormalise(dewarped)
+    img2 = TF.to_pil_image(img2).resize((size, size))
+
+    full = concat_h(img1, img2)
+
+    return full
+
+
 def grid_to_binary(grid):
     mask = TF.to_pil_image(grid.view(7, 7))
     mask = mask.resize((1024, 1024), Image.BICUBIC)
