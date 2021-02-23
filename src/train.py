@@ -4,15 +4,24 @@ import pytorch_lightning as pl
 from argparse import ArgumentParser
 import random
 from dewarper import *
+from pytorch_lightning.callbacks import ModelCheckpoint
 
 
 def main(hparams):
     random.seed(42)
     model = Dewarper(hparams)
-    wandb_logger = WandbLogger(name=hparams.name, project='psbattles')
+    wandb_logger = WandbLogger(name=hparams.name, project='psbattles', tags=['STN'])
     wandb_logger.experiment.save('dewarper.py', policy='now')
+    wandb_logger.experiment.save('models.py', policy='now')
+    checkpoint_callback = ModelCheckpoint(
+        filepath='/path/to/store/weights.ckpt',
+        verbose=True,
+        save_last=True,
+        monitor='val_loss',
+        mode='min'
+    )
     trainer = pl.Trainer(gpus=[hparams.gpus], logger=wandb_logger, log_every_n_steps=1,
-                         check_val_every_n_epoch=5)
+                         check_val_every_n_epoch=1, replace_sampler_ddp=False, callbacks=[checkpoint_callback])
     trainer.fit(model)
 
 

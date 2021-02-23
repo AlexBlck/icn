@@ -29,7 +29,7 @@ class PB(Dataset):
             self.pairs = pd.read_csv(self.TRAIN_LST)
         self.res = pd.concat([pd.read_csv(mturk) for mturk in self.MTURK], ignore_index=True)
 
-        self.img_transforms_train = transforms.Compose([ # transforms.RandomAffine(30, (0.1, 0.1), (0.8, 1.2),resample=Image.BILINEAR)
+        self.img_transforms_train = transforms.Compose([transforms.RandomAffine(15),
                                                         transforms.ToTensor(),
                                                         transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                                                              std=[0.229, 0.224, 0.225]),

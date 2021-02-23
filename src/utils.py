@@ -1,7 +1,11 @@
 from PIL import Image
+from PIL import ImageFont
+from PIL import ImageDraw
+from PIL import ImageChops
 import numpy as np
 import torchvision.transforms.functional as TF
 import matplotlib.pyplot as plt
+import torch
 
 
 def convert_annotation(org_size, pho_size, m_size, ann):
@@ -105,6 +109,15 @@ def grid_to_heatmap(grid, cmap='jet'):
     heatmap = Image.fromarray(heatmap)
 
     return heatmap, mask
+
+
+def grayscale_to_heatmap(img, cmap='jet'):
+    colormap = plt.get_cmap(cmap)
+    heatmap = np.array(colormap(img))
+    heatmap = (heatmap * 255).astype(np.uint8)
+    heatmap = Image.fromarray(heatmap)
+
+    return heatmap
 
 
 def summary_image(img, target, prediction):
@@ -231,8 +244,11 @@ def stn_only_summary_image(img, fake):
     return full
 
 
-def dewarper_summary_image(warped, dewarped):
-    size = 1024
+def dewarper_summary_image(dewarped_mask, img, warped, dewarped):
+    size = 512
+
+    img0 = unnormalise(img)
+    img0 = TF.to_pil_image(img0).resize((size, size))
 
     img1 = unnormalise(warped)
     img1 = TF.to_pil_image(img1).resize((size, size))
@@ -240,9 +256,26 @@ def dewarper_summary_image(warped, dewarped):
     img2 = unnormalise(dewarped)
     img2 = TF.to_pil_image(img2).resize((size, size))
 
-    full = concat_h(img1, img2)
+    img3 = TF.to_pil_image(torch.abs(unnormalise(img * dewarped_mask[0]) - unnormalise(dewarped * dewarped_mask[0]))).resize((size, size)).convert('L')
+    img3 = grayscale_to_heatmap(img3)
+
+    text_on_img(img0, 'Original')
+    text_on_img(img1, 'Warped')
+    text_on_img(img2, 'Dewarped')
+    text_on_img(img3, 'Difference', col=(255, 255, 255))
+
+    top = concat_h(img0, img1)
+    bot = concat_h(img2, img3)
+
+    full = concat_v(top, bot)
 
     return full
+
+
+def text_on_img(img, text, size=24, pos=(0, 0), col=(0, 0, 0)):
+    draw = ImageDraw.Draw(img)
+    font = ImageFont.truetype("FreeSans.ttf", size)
+    draw.text(pos, text, col, font=font)
 
 
 def grid_to_binary(grid):
