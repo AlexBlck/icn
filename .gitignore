@@ -10,3 +10,15 @@ robustness/
 videos/
 
 weights/
+
+*.jpg
+
+*.npy
+
+*.png
+
+*.npz
+
+*.csv
+
+*.ipynb

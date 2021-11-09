@@ -8,6 +8,21 @@ import matplotlib.pyplot as plt
 import torch
 
 
+def text_on_img(img, text, size=24, pos=[0, 0], col=(0, 0, 0), center=False):
+    draw = ImageDraw.Draw(img)
+    font = ImageFont.truetype("timr45w.ttf", size)
+
+    w, h = draw.textsize(text, font=font)
+    if center:
+        pos[1] -= h//2
+    draw.text(pos, text, col, font=font)
+
+
+def rect_on_img(img, fill, outline, pos, width=1):
+    draw = ImageDraw.Draw(img)
+    draw.rectangle(pos, fill=fill, outline=outline, width=width)
+
+
 def convert_annotation(org_size, pho_size, m_size, ann):
     """convert mturk annotation to bounding box matching original size
     org_size, pho_size, m_size are size of original, photoshop images in PSBattles and joint image shown to turker.
@@ -54,18 +69,18 @@ def convert_annotation(org_size, pho_size, m_size, ann):
     return ann_out, which
 
 
-def concat_h(im1, im2):
+def concat_h(im1, im2, mode=Image.BICUBIC):
     r = im1.height / im2.height
-    im2 = im2.resize((int(r * im2.width), im1.height), Image.BICUBIC)
+    im2 = im2.resize((int(r * im2.width), im1.height), mode)
     dst = Image.new('RGB', (im1.width + im2.width, im1.height))
     dst.paste(im1, (0, 0))
     dst.paste(im2, (im1.width, 0))
     return dst
 
 
-def concat_v(im1, im2):
+def concat_v(im1, im2, mode=Image.BICUBIC):
     r = im1.width / im2.width
-    im2 = im2.resize((im1.width, int(r * im2.height)), Image.BICUBIC)
+    im2 = im2.resize((im1.width, int(r * im2.height)), mode)
     dst = Image.new('RGB', (im1.width, im1.height + im2.height))
     dst.paste(im1, (0, 0))
     dst.paste(im2, (0, im1.height))
@@ -86,20 +101,22 @@ def unnormalise(y):
     return x
 
 
-def mask_processing(x):
-    if x > 90:
-        return 140
-    elif x < 80:
-        return 0
-    else:
-        return 255
+def mask_processing(x, use_t=True):
+    if use_t:
+        if x > 90:
+            return 140
+        elif x < 80:
+            return 0
+        else:
+            return 255
+    return x
 
 
-def grid_to_heatmap(grid, cmap='jet'):
+def grid_to_heatmap(grid, cmap='jet', size=1024):
     # TODO: pad grid with zeros to remove side stickiness ?
 
     mask = TF.to_pil_image(grid.view(7, 7))
-    mask = mask.resize((1024, 1024), Image.BICUBIC)
+    mask = mask.resize((size, size), Image.BICUBIC)
     mask = Image.eval(mask, mask_processing)
 
     # Heatmap
@@ -118,6 +135,45 @@ def grayscale_to_heatmap(img, cmap='jet'):
     heatmap = Image.fromarray(heatmap)
 
     return heatmap
+
+
+def make_pred_bar(preds):
+    img = Image.new('RGB', (1024, 1024), color='white')
+    annotations = Image.new('RGB', (1024, 50), color='white')
+    cols = [(89, 117, 164), (204, 137, 99), (95, 158, 110)]
+    cols_prob = [(185, 197, 219), (239, 206, 187), (188, 227, 197)]
+    cls = ('Original', 'Manip.', 'Distinct')
+    w = 200
+    font_size = 120
+
+    for y in np.arange(0, 1.01, 0.25):
+        f = 1
+        if y == 1:
+            f *= -1
+        rect_on_img(img, fill=(204, 204, 204), outline=None,
+                    pos=[int(1024*y), 0, int(1024*y) + 5*f, 1024])
+
+    offset = 20  # (1024 - (2*341 + w))//2
+    for i, prob in enumerate(preds):
+        xpos = i*341 + offset
+        rect_on_img(img, fill=cols[i], outline=None, pos=[0, xpos, int(1024 * prob), xpos + w])
+        text_on_img(img, cls[i], pos=[10, xpos + w], size=font_size, col=(40, 40, 40))
+
+        if prob > 0.78:
+            text_on_img(img, f'{prob * 100:.00f}%', pos=[max(10, int(1024 * prob) - 215), xpos + w//2 - 10], size=font_size, col=cols_prob[i], center=True)
+        else:
+            text_on_img(img, f'{prob * 100:.00f}%', pos=[int(1024 * prob) + 10, xpos + w // 2 - 10], size=font_size,
+                        col=(140, 140, 140), center=True)
+
+    # img = img.rotate(-90)
+    # for i in range(3):
+    #     xpos = i * 341 + offset
+    #
+    # img.show()
+    return img
+
+
+make_pred_bar(np.array([0.19, 0.2, 0.22]))
 
 
 def summary_image(img, target, prediction):
@@ -156,41 +212,43 @@ def short_summary_image(img, target, prediction):
     img1 = TF.to_pil_image(img1).resize((size, size))
 
     # Heatmap of target
-    heatmap, mask = grid_to_heatmap(target, cmap='winter')
+    heatmap, mask = grid_to_heatmap(target, cmap='Wistia')
     img1.paste(heatmap, (0, 0), mask)
 
     # Heatmap of prediction
-    heatmap, mask = grid_to_heatmap(prediction, cmap='Wistia')
+    heatmap, mask = grid_to_heatmap(prediction, cmap='winter')
     img1.paste(heatmap, (0, 0), mask)
 
     return img1
 
 
-def short_summary_image_three(img, target, prediction):
+def short_summary_image_three(img, target, prediction, pho_clean):
     prediction -= prediction.min()
     prediction = prediction / prediction.max()
 
     size = 1024
 
+    pho_clean = TF.to_pil_image(unnormalise(pho_clean)).resize((size, size))
+
     # Photoshopped image
-    img1 = unnormalise(img[3:, :, :])
-    img1 = TF.to_pil_image(img1).resize((size, size))
+    pho_noisy = unnormalise(img[3:, :, :])
+    pho_noisy = TF.to_pil_image(pho_noisy).resize((size, size))
 
-    img3 = unnormalise(img[:3, :, :])
-    img3 = TF.to_pil_image(img3).resize((size, size))
-
-    img2 = img1.copy()
-
-    # Heatmap of target
-    heatmap, mask = grid_to_heatmap(target, cmap='winter')
-    img1.paste(heatmap, (0, 0), mask)
+    org = unnormalise(img[:3, :, :])
+    org = TF.to_pil_image(org).resize((size, size))
 
     # Heatmap of prediction
-    heatmap, mask = grid_to_heatmap(prediction, cmap='Wistia')
-    img1.paste(heatmap, (0, 0), mask)
+    heatmap, mask = grid_to_heatmap(prediction, cmap='winter', size=size)
+    pho_clean.paste(heatmap, (0, 0), mask)
 
-    full = concat_h(img3, img2)
-    full = concat_h(full, img1)
+    # Heatmap of target
+    heatmap, mask = grid_to_heatmap(target, cmap='Wistia')
+    pho_clean.paste(heatmap, (0, 0), mask)
+
+
+
+    full = concat_h(org, pho_noisy)
+    full = concat_h(full, pho_clean)
 
     return full
 
@@ -212,11 +270,11 @@ def stn_summary_image(img, target, fake, prediction):
     img3 = TF.to_pil_image(img3).resize((size, size))
 
     # Heatmap of target
-    heatmap, mask = grid_to_heatmap(target, cmap='winter')
+    heatmap, mask = grid_to_heatmap(target, cmap='Wistia')
     img3.paste(heatmap, (0, 0), mask)
 
     # Heatmap of prediction
-    heatmap, mask = grid_to_heatmap(prediction, cmap='Wistia')
+    heatmap, mask = grid_to_heatmap(prediction, cmap='winter')
     img3.paste(heatmap, (0, 0), mask)
 
     full = concat_h(img1, img2)
@@ -272,10 +330,7 @@ def dewarper_summary_image(dewarped_mask, img, warped, dewarped):
     return full
 
 
-def text_on_img(img, text, size=24, pos=(0, 0), col=(0, 0, 0)):
-    draw = ImageDraw.Draw(img)
-    font = ImageFont.truetype("FreeSans.ttf", size)
-    draw.text(pos, text, col, font=font)
+
 
 
 def grid_to_binary(grid):
@@ -296,6 +351,8 @@ def heatmap_iou(target, prediction):
     intersection = np.count_nonzero(np.logical_and(binary_mask_target, binary_mask_pred))
     union = np.count_nonzero(np.logical_or(binary_mask_target, binary_mask_pred))
 
+    if union == 0:
+        return 0
     return intersection / union
 
 

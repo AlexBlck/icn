@@ -16,11 +16,10 @@ from model_utils import freeze
 import torchsummary
 from warp import *
 from torch.utils.data.sampler import SubsetRandomSampler
-from correlation_torch import CorrTorch as Correlation
 
 
 class Dewarper(pl.LightningModule):
-    def __init__(self, hparams, separate=True, dataset='pb'):
+    def __init__(self, hparams, separate=True, dataset='imagenet'):
         super().__init__()
 
         # Hyperparameters
@@ -28,6 +27,7 @@ class Dewarper(pl.LightningModule):
         self.dataset = dataset
         # Dataset
         if dataset == 'imagenet':
+            print('Loading imagenet')
             tr = transforms.Compose([transforms.Resize((224, 224)),
                                      transforms.ToTensor(),
                                      transforms.Normalize(mean=[0.485, 0.456, 0.406],
@@ -63,7 +63,7 @@ class Dewarper(pl.LightningModule):
         # freeze(self.cnn_head)  # train_bn = True
         # freeze(self.cnn_tail)  # train_bn = True
 
-        self.conv1 = nn.Conv2d(81, 256, 3, padding=1)
+        self.conv1 = nn.Conv2d(128, 256, 3, padding=1)
         self.bn1 = nn.BatchNorm2d(num_features=256)
 
         self.fc1 = nn.Linear(2048 * 7 * 7, 256)
@@ -76,14 +76,12 @@ class Dewarper(pl.LightningModule):
         self.fc2.weight.data.zero_()
         self.fc2.bias.data.copy_(torch.tensor([1, 0, 0, 0, 1, 0], dtype=torch.float))
 
-        self.corr = Correlation()
-
     def forward(self, original, warped):
         # Push both images through backbone
         real_features = F.relu(self.cnn_head(original))    # [-1, 64, 56, 56]
         fake_features = F.relu(self.cnn_head(warped))    # [-1, 64, 56, 56]
 
-        combined = self.corr(real_features, fake_features)  # [-1, 81, 56, 56]
+        combined = torch.cat((real_features, fake_features), 1)  # [-1, 128, 56, 56]
 
         x = self.conv1(combined)  # [-1, 256, 56, 56]
         x = self.bn1(x)
@@ -103,8 +101,7 @@ class Dewarper(pl.LightningModule):
 
     def trainval_step(self, batch, batch_idx):
 
-        img, target, cls_target = batch
-        original = img[:, :3, :, :]
+        original, target = batch
         mask = torch.ones_like(original)
 
         # Affine matrix values
@@ -148,7 +145,7 @@ class Dewarper(pl.LightningModule):
         dewarped_mask = F.grid_sample(warped_mask, grid)
 
         # Compute metrics
-        affine_loss = F.l1_loss(mat[:, :2, :], x[:, :, :], reduction='mean')
+        affine_loss = F.mse_loss(mat[:, :2, :], x[:, :, :], reduction='mean')
         # translation_loss = F.l1_loss(mat[:, :2, 2:], x[:, :, 2:], reduction='mean')
         reconstruction_loss = F.mse_loss(original * dewarped_mask, dewarped * dewarped_mask, reduction='mean')
         loss = affine_loss + 10 * reconstruction_loss

@@ -12,7 +12,7 @@ dependencies:
   - py-opencv=4.5.0
   - python=3.8.6=h852b56e_0_cpython
   - pip:
-    - pytorch-lightning==1.0.5
+    - pytorch-lightning
     - torch==1.7.0
     - torchsummary==1.5.1
     - torchvision==0.8.1

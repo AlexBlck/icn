@@ -7,12 +7,17 @@ import numpy as np
 from torch.utils.data import Dataset
 from torchvision import transforms
 import torch
-from transforms import ImagenetC
+from transforms import ImagenetC, Augly
+import random
 
 
 class PB(Dataset):
-    def __init__(self, root_prefix, split='test', max_sev=5):
+    def __init__(self, root_prefix, split='test', method_id=None, query_set=0):
+        np.random.seed(42)
+        random.seed(42)
+
         root = 'research/contentprov/projects/content_prov/data/psbattles/'
+        # root = 'psbattles/'
         root = os.path.join(root_prefix, root)
         self.split = split
         self.IMG_DIR = os.path.join(root, 'psbattles_public')
@@ -21,7 +26,7 @@ class PB(Dataset):
         self.MTURK = [os.path.join(root, 'mturk_res/tu_1.csv'),
                       os.path.join(root, 'mturk_res/tu_2.csv'),
                       os.path.join(root, 'mturk_res/tu_3.csv')]
-        self.colors = ['red', 'green', 'blue', 'magenta', 'cyan', 'yellow']
+        self.colors = ['red', 'reen', 'blue', 'magenta', 'cyan', 'yellow']
 
         if split == 'test':
             self.pairs = pd.read_csv(self.TEST_LST)
@@ -29,16 +34,20 @@ class PB(Dataset):
             self.pairs = pd.read_csv(self.TRAIN_LST)
         self.res = pd.concat([pd.read_csv(mturk) for mturk in self.MTURK], ignore_index=True)
 
-        self.img_transforms_train = transforms.Compose([transforms.RandomAffine(15),
+        self.img_transforms_train = transforms.Compose([transforms.Resize((224, 224)),
+                                                        transforms.
+                                                       Augly(),
                                                         transforms.ToTensor(),
                                                         transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                                                              std=[0.229, 0.224, 0.225]),
                                                         ])
-        self.img_transforms_test = transforms.Compose([transforms.ToTensor(),
+        self.img_transforms_test = transforms.Compose([transforms.Resize((224, 224)),
+                                                       transforms.ToTensor(),
                                                        transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                                                             std=[0.229, 0.224, 0.225]),
                                                        ])
         self.target_transforms = transforms.Compose([transforms.ToTensor()])
+        self.query_set = query_set
 
     def __len__(self):
         return len(self.pairs)
@@ -46,9 +55,11 @@ class PB(Dataset):
     def __getitem__(self, idx):
         case = np.random.randint(2)
         if case == 0:
+            return self.get_org_org(idx)
+        elif case == 1:
             return self.get_org_pho(idx)
         else:
-            return self.get_org_org(idx)
+            return self.get_org_rand(idx)
 
     def get_org_pho(self, idx):
         """
@@ -80,16 +91,14 @@ class PB(Dataset):
         target = self.get_target(ann_out)  # Bbox annotations into a 7x7 grid
 
         # Apply transforms
-        if self.split == 'train':
-            org = self.img_transforms_test(org.resize((224, 224)))
-            pho = self.img_transforms_train(pho.resize((224, 224)))
-        else:
-            org = self.img_transforms_test(org.resize((224, 224)))
-            pho = self.img_transforms_test(pho.resize((224, 224)))
+        org = self.img_transforms_test(org)
+        pho_noisy = self.img_transforms_train(pho)
+        pho_clean = self.img_transforms_test(pho)
+
         target = self.target_transforms(target)
 
-        img = torch.vstack((org, pho))  # Stack images channel-wise
-        return img, target.view(-1), 1
+        img = torch.vstack((org, pho_noisy))  # Stack images channel-wise
+        return img, target.view(-1), 1, pho_clean
 
     def get_org_org(self, idx):
         """
@@ -102,16 +111,35 @@ class PB(Dataset):
         target = np.zeros((7, 7))  # Same image - black heatmap
 
         # Apply transforms
-        if self.split == 'train':
-            org1 = self.img_transforms_test(org)
-            org2 = self.img_transforms_train(org)
-        else:
-            org1 = self.img_transforms_test(org)
-            org2 = self.img_transforms_test(org)
+
+        org1 = self.img_transforms_test(org)
+        org2 = self.img_transforms_train(org)
+
         target = self.target_transforms(target)
 
         img = torch.vstack((org1, org2))
-        return img, target.view(-1), 0
+        return img, target.view(-1), 0, org1
+
+    def get_org_rand(self, idx):
+        """
+        Get the original image, another random image and a full white heatmap
+        """
+        org_path = self.pairs['original'][idx]
+        rand_path = self.pairs['original'][np.random.randint(len(self))]
+
+        org = Image.open(os.path.join(self.IMG_DIR, org_path)).convert('RGB').resize((224, 224))
+        rand = Image.open(os.path.join(self.IMG_DIR, rand_path)).convert('RGB').resize((224, 224))
+
+        target = np.ones((7, 7))  # Completely different images - white heatmap
+
+        # Apply transforms
+        org = self.img_transforms_test(org)
+        rand = self.img_transforms_train(rand)
+
+        target = self.target_transforms(target)
+
+        img = torch.cat((org, rand), 0)
+        return img, target.view(-1), 2, rand
 
     @staticmethod
     def get_target(ann_out):
